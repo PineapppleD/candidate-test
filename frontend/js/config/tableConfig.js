@@ -4,7 +4,6 @@ export const TABLE_CONFIG = {
         id: {
             title: 'ID',
             width: '80px',
-            align: 'center',
             visible: true
         },
         represent: {
