@@ -335,9 +335,12 @@ class ModalManager {
       const result = await ApiClient.selectInstance('nomenclature', uuid);
       if (result.status !== 200) throw new Error(result.message);
 
+      // Сохраняем оригинальные данные для проверки изменений
+      this.currentData = { ...result.data };
+
       this.renderFieldsWithData(result.data, 'edit');
+
       actionBtn.onclick = () => {
-        // если есть ошибки валидации, покажем alert
         if (actionBtn.title) {
           alert('Исправьте ошибки валидации перед обновлением');
           return;
@@ -349,6 +352,7 @@ class ModalManager {
       this.showError(`Ошибка загрузки: ${error.message}`);
     }
   }
+
 
   async validateCode(value, originalValue) {
     const val = value.trim();
@@ -458,26 +462,35 @@ class ModalManager {
     const fieldTitle = config.title || field.name;
     label.textContent = fieldTitle + (config.required ? ' *' : '');
     label.style.cssText = `
-      display: block;
-      margin-bottom: 5px;
-      font-weight: bold;
-      color: ${config.required ? '#d63384' : '#333'};
-    `;
+    display: block;
+    margin-bottom: 5px;
+    font-weight: bold;
+    color: ${config.required ? '#d63384' : '#333'};
+  `;
 
     const input = document.createElement('input');
     input.name = field.name;
     input.type = config.type || 'text';
+
+    // --- Форматируем даты красиво ---
+    if ((field.name === 'insertdate' || field.name === 'updatedate') && value) {
+      const date = new Date(value);
+      value = date.toLocaleString(); // например: "17.11.2025, 15:10:29"
+      input.disabled = true; // дату нельзя редактировать вручную
+      input.style.color = '#6c757d';
+    }
+
     input.value = value || '';
     input.required = config.required;
     input.placeholder = config.placeholder || `Введите ${fieldTitle.toLowerCase()}`;
     input.style.cssText = `
-      width: 100%;
-      padding: 8px;
-      border: 1px solid ${config.required ? '#fd7e14' : '#ddd'};
-      border-radius: 4px;
-      box-sizing: border-box;
-      background: ${config.editable ? 'white' : '#f8f9fa'};
-    `;
+    width: 100%;
+    padding: 8px;
+    border: 1px solid ${config.required ? '#fd7e14' : '#ddd'};
+    border-radius: 4px;
+    box-sizing: border-box;
+    background: ${config.editable ? 'white' : '#f8f9fa'};
+  `;
 
     if (!config.editable) {
       input.disabled = true;
@@ -488,6 +501,7 @@ class ModalManager {
     fieldGroup.appendChild(input);
     return fieldGroup;
   }
+
 
   addRequiredFieldsNote(container) {
     const noteDiv = document.createElement('div');
@@ -523,11 +537,24 @@ class ModalManager {
   }
 
   async handleUpdate(uuid) {
-    const data = this.collectFormData();
-    if (!data) return;
+    const newData = this.collectFormData();
+    if (!newData) return;
+
+    const oldData = this.currentData || {};
+
+    const isChanged = Object.keys(newData).some(key => {
+      return key !== 'updatedate' && newData[key] !== oldData[key];
+    });
+
+    if (!isChanged) {
+      alert('Нет изменений для сохранения');
+      return;
+    }
+
+    newData.updatedate = new Date().toISOString();
 
     try {
-      const result = await ApiClient.updateInstance('nomenclature', uuid, data);
+      const result = await ApiClient.updateInstance('nomenclature', uuid, newData);
       if (result.status === 200) {
         alert('Запись успешно обновлена');
         this.close();
