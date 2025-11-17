@@ -118,18 +118,56 @@ class TableManager {
   constructor(container, config) {
     this.container = container;
     this.config = config;
+    this.data = [];
   }
 
   render(data) {
+    this.data = data;
     this.container.innerHTML = '';
 
     // Создаем кнопку "Создать"
     const createButton = this.createButton();
     this.container.appendChild(createButton);
 
+    const searchInput = this.createSearchInput();
+    this.container.appendChild(searchInput);
+
     // Создаем таблицу
-    const table = this.createTable(data);
+    const table = this.createTable(this.data);
     this.container.appendChild(table);
+  }
+
+  createSearchInput() {
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.placeholder = 'Поиск по коду или названию...';
+    input.style.cssText = `
+      width: 100%;
+      padding: 10px;
+      margin-bottom: 15px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      box-sizing: border-box;
+    `;
+
+    const debouncedFilter = nomenclatureManager.debounce(() => {
+      const query = input.value.toLowerCase();
+
+      const filteredData = this.data.filter(item =>
+        (item.code && item.code.toLowerCase().includes(query)) ||
+        (item.represent && item.represent.toLowerCase().includes(query))
+      );
+
+      const oldTable = this.container.querySelector('table');
+      if (oldTable) oldTable.remove();
+
+      const newTable = this.createTable(filteredData);
+      this.container.appendChild(newTable);
+    }, 300);
+
+    input.addEventListener('input', debouncedFilter);
+
+    return input;
   }
 
   createButton() {
@@ -212,7 +250,6 @@ class TableManager {
       modalManager.openEditModal(row.uuid);
     });
 
-    // Создаем ячейки
     Object.entries(this.config.columns).forEach(([fieldName, config]) => {
       if (!config.visible) return;
 
@@ -644,6 +681,14 @@ class NomenclatureManager {
     this.tableManager = null;
   }
 
+  debounce(func, delay = 300) {
+    let timeout;
+    return (...args) => {
+      clearTimeout(timeout);
+      timeout = setTimeout(() => func.apply(this, args), delay);
+    };
+  }
+
   async init(containerId) {
     this.container = document.getElementById(containerId);
     if (!this.container) return;
@@ -668,7 +713,6 @@ class NomenclatureManager {
         this.container.innerHTML = '<p>Нет данных</p>';
         return;
       }
-
       this.tableManager.render(result.data);
 
     } catch (error) {
