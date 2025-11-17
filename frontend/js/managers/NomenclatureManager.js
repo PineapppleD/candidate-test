@@ -26,26 +26,26 @@ export default class NomenclatureManager {
         await this.loadData();
     }
 
-    async loadData() {
+    async loadData(showDeleted = false) {
         if (!this.container) return;
 
         this.container.innerHTML = '<p>Загрузка номенклатуры...</p>';
 
         try {
-            const result = await ApiClient.getNomenclature();
+            const result = await ApiClient.getNomenclature(showDeleted);
 
-            if (result.status !== 200) {
-                throw new Error(result.message || 'Ошибка запроса');
-            }
+            if (result.status !== 200) throw new Error(result.message || 'Ошибка запроса');
 
             if (!result.data || !result.data.length) {
                 this.container.innerHTML = '<p>Нет данных</p>';
                 return;
             }
-            this.tableManager.render(result.data);
+
+            this.tableManager.render(result.data, showDeleted);
 
         } catch (error) {
             this.container.innerHTML = `<p style='color:red'>Ошибка: ${error.message}</p>`;
         }
     }
+
 }

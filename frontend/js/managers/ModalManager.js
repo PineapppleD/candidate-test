@@ -85,27 +85,27 @@ export default class ModalManager {
         }
     }
 
-    async openEditModal(uuid) {
-        const title = document.getElementById('modal-title');
-        const actionBtn = document.getElementById('modal-action-btn');
-        const deleteBtn = document.getElementById('modal-delete-btn');
+   async openEditModal(uuid) {
+    const title = document.getElementById('modal-title');
+    const actionBtn = document.getElementById('modal-action-btn');
+    const deleteBtn = document.getElementById('modal-delete-btn');
 
-        title.textContent = 'Редактирование экземпляра';
-        actionBtn.textContent = 'Обновить';
-        deleteBtn.style.display = 'inline-block';
+    title.textContent = 'Редактирование экземпляра';
+    deleteBtn.style.display = 'inline-block';
 
-        this.show();
-        this.showLoading();
+    this.show();
+    this.showLoading();
 
-        try {
-            const result = await ApiClient.selectInstance('nomenclature', uuid);
-            if (result.status !== 200) throw new Error(result.message);
+    try {
+        const result = await ApiClient.selectInstance('nomenclature', uuid);
+        if (result.status !== 200) throw new Error(result.message);
 
-            // Сохраняем оригинальные данные для проверки изменений
-            this.currentData = { ...result.data };
+        this.currentData = { ...result.data };
+        this.renderFieldsWithData(result.data, 'edit');
 
-            this.renderFieldsWithData(result.data, 'edit');
-
+        if (!this.currentData.deleted) {
+            actionBtn.style.display = 'inline-block';
+            actionBtn.textContent = 'Обновить';
             actionBtn.onclick = () => {
                 if (actionBtn.title) {
                     alert('Исправьте ошибки валидации перед обновлением');
@@ -113,11 +113,22 @@ export default class ModalManager {
                 }
                 this.handleUpdate(uuid);
             };
-            deleteBtn.onclick = () => this.handleDelete(uuid);
-        } catch (error) {
-            this.showError(`Ошибка загрузки: ${error.message}`);
+        } else {
+            actionBtn.style.display = 'none';
         }
+
+        if (result.data.deleted) {
+            deleteBtn.textContent = 'Восстановить';
+            deleteBtn.onclick = () => this.handleRestore(uuid);
+        } else {
+            deleteBtn.textContent = 'Удалить';
+            deleteBtn.onclick = () => this.handleDelete(uuid);
+        }
+
+    } catch (error) {
+        this.showError(`Ошибка загрузки: ${error.message}`);
     }
+}
 
 
     async validateCode(value, originalValue) {
@@ -337,18 +348,35 @@ export default class ModalManager {
         if (!confirm('Вы уверены что хотите удалить эту запись?')) return;
 
         try {
-            const result = await ApiClient.deleteInstance('nomenclature', uuid);
+            const result = await ApiClient.updateInstance('nomenclature', uuid, { deleted: true });
             if (result.status === 200) {
-                alert('Запись успешно удалена');
+                alert('Запись успешно удалена (soft delete)');
                 this.close();
                 this.nomenclatureManager.loadData();
-            } else {
-                alert(`Ошибка удаления: ${result.message}`);
             }
         } catch (error) {
             alert(`Ошибка: ${error.message}`);
         }
     }
+
+    async handleRestore(uuid) {
+        if (!confirm('Вы уверены, что хотите восстановить эту запись?')) return;
+
+        try {
+            const result = await ApiClient.updateInstance('nomenclature', uuid, { deleted: false });
+            if (result.status === 200) {
+                alert('Запись успешно восстановлена');
+                this.close();
+                this.nomenclatureManager.loadData();
+            } else {
+                alert(`Ошибка восстановления: ${result.message}`);
+            }
+        } catch (error) {
+            alert(`Ошибка: ${error.message}`);
+        }
+    }
+
+
 
     collectFormData() {
         const inputs = document.querySelectorAll('#modal-fields input:not([disabled])');

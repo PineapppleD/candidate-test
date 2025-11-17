@@ -1,4 +1,5 @@
 import { debounce } from "../utils/debounce.js";
+import ApiClient from "../api/ApiCilent.js";
 
 // Класс для управления таблицей
 export default class TableManager {
@@ -9,21 +10,55 @@ export default class TableManager {
         this.data = [];
     }
 
-    render(data) {
-        this.data = data;
+    render(data, showDeleted = false) {
+        this.data = data.filter(item => !item.deleted);
         this.container.innerHTML = '';
 
-        // Создаем кнопку "Создать"
+        const toggle = this.createShowDeletedToggle(showDeleted);
+        this.container.appendChild(toggle);
+
         const createButton = this.createButton();
         this.container.appendChild(createButton);
 
         const searchInput = this.createSearchInput();
         this.container.appendChild(searchInput);
 
-        // Создаем таблицу
         const table = this.createTable(this.data);
         this.container.appendChild(table);
     }
+
+    createShowDeletedToggle(showDeleted) {
+        const container = document.createElement('div');
+        container.style.marginBottom = '10px';
+
+        const label = document.createElement('label');
+        label.textContent = 'Показать удаленные';
+        label.style.marginRight = '10px';
+
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.checked = showDeleted;
+
+        checkbox.addEventListener('change', async () => {
+            const { data: allData } = await ApiClient.getNomenclature(); // получаем все записи
+            const data = checkbox.checked
+                ? allData.filter(item => item.deleted)
+                : allData.filter(item => !item.deleted); // только не удалённые
+
+            const oldTable = this.container.querySelector('table');
+            if (oldTable) oldTable.remove();
+
+            const newTable = this.createTable(data);
+            this.container.appendChild(newTable);
+        });
+
+
+        container.appendChild(label);
+        container.appendChild(checkbox);
+        return container;
+    }
+
+
 
     createSearchInput() {
         const input = document.createElement('input');
@@ -121,9 +156,9 @@ export default class TableManager {
     createDataRow(row) {
         const dataRow = document.createElement('tr');
         dataRow.style.cssText = `
-      cursor: pointer;
-      transition: background-color 0.2s;
-    `;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        `;
 
         // Hover эффект
         dataRow.addEventListener('mouseenter', () => {
