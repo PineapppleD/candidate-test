@@ -5,30 +5,30 @@ let loadedScripts = [];
 
 // Конфигурация полей для форм
 const FIELDS_CONFIG = {
-  id: { 
-    editable: false, 
+  id: {
+    editable: false,
     visible: { create: false, edit: true },
     required: false,
     type: 'text',
     title: 'ID'
   },
-  uuid: { 
-    editable: false, 
+  uuid: {
+    editable: false,
     visible: { create: false, edit: true },
     required: false,
     type: 'text',
     title: 'UUID'
   },
-  code: { 
-    editable: true, 
+  code: {
+    editable: true,
     visible: { create: true, edit: true },
     required: false,
     type: 'text',
     title: 'Код',
     placeholder: 'Введите уникальный код'
   },
-  represent: { 
-    editable: true, 
+  represent: {
+    editable: true,
     visible: { create: true, edit: true },
     required: true,
     type: 'text',
@@ -122,7 +122,7 @@ class TableManager {
 
   render(data) {
     this.container.innerHTML = '';
-    
+
     // Создаем кнопку "Создать"
     const createButton = this.createButton();
     this.container.appendChild(createButton);
@@ -177,14 +177,14 @@ class TableManager {
 
     Object.entries(this.config.columns).forEach(([fieldName, config]) => {
       if (!config.visible) return;
-      
+
       const th = document.createElement('th');
       th.textContent = config.title;
-      
+
       const cellStyles = { ...this.config.cellStyle };
       if (config.width) cellStyles.width = config.width;
       if (config.align) cellStyles.textAlign = config.align;
-      
+
       th.style.cssText = this.getStyleString(cellStyles);
       row.appendChild(th);
     });
@@ -198,7 +198,7 @@ class TableManager {
       cursor: pointer;
       transition: background-color 0.2s;
     `;
-    
+
     // Hover эффект
     dataRow.addEventListener('mouseenter', () => {
       dataRow.style.backgroundColor = '#f0f8ff';
@@ -206,27 +206,27 @@ class TableManager {
     dataRow.addEventListener('mouseleave', () => {
       dataRow.style.backgroundColor = '';
     });
-    
+
     // Клик по строке
     dataRow.addEventListener('click', () => {
       modalManager.openEditModal(row.uuid);
     });
-    
+
     // Создаем ячейки
     Object.entries(this.config.columns).forEach(([fieldName, config]) => {
       if (!config.visible) return;
-      
+
       const td = document.createElement('td');
       td.textContent = row[fieldName] || '';
-      
+
       const cellStyles = { ...this.config.cellStyle };
       if (config.width) cellStyles.width = config.width;
       if (config.align) cellStyles.textAlign = config.align;
-      
+
       td.style.cssText = this.getStyleString(cellStyles);
       dataRow.appendChild(td);
     });
-    
+
     return dataRow;
   }
 
@@ -257,7 +257,7 @@ class ModalManager {
       display: none;
       z-index: 1000;
     `;
-    
+
     // Само модальное окно
     const modal = document.createElement('div');
     modal.id = 'instance-modal';
@@ -275,7 +275,7 @@ class ModalManager {
       max-height: 80vh;
       overflow-y: auto;
     `;
-    
+
     modal.innerHTML = `
       <h3 id="modal-title" style="margin: 0 0 20px 0; color: #333;">Модальное окно</h3>
       <div id="modal-fields" style="margin-bottom: 20px;"></div>
@@ -285,10 +285,10 @@ class ModalManager {
         <button id="modal-cancel-btn" style="background: #6c757d; color: white; padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer;">Отмена</button>
       </div>
     `;
-    
+
     modalOverlay.appendChild(modal);
     document.body.appendChild(modalOverlay);
-    
+
     // События - добавляем ПОСЛЕ того как элементы добавлены в DOM
     document.getElementById('modal-cancel-btn').addEventListener('click', () => this.close());
     modalOverlay.addEventListener('click', (e) => {
@@ -300,20 +300,20 @@ class ModalManager {
     const title = document.getElementById('modal-title');
     const actionBtn = document.getElementById('modal-action-btn');
     const deleteBtn = document.getElementById('modal-delete-btn');
-    
+
     title.textContent = 'Создание нового экземпляра';
     actionBtn.textContent = 'Создать';
     deleteBtn.style.display = 'none';
-    
+
     this.show();
-    
+
     try {
       const metadata = await ApiClient.getMetadata('nomenclature');
       if (!metadata.fields) throw new Error('Не удалось получить метаданные');
-      
+
       this.renderFields(metadata.fields, 'create');
       actionBtn.onclick = () => this.handleCreate();
-      
+
     } catch (error) {
       this.showError(`Ошибка загрузки полей: ${error.message}`);
     }
@@ -323,62 +323,137 @@ class ModalManager {
     const title = document.getElementById('modal-title');
     const actionBtn = document.getElementById('modal-action-btn');
     const deleteBtn = document.getElementById('modal-delete-btn');
-    
+
     title.textContent = 'Редактирование экземпляра';
     actionBtn.textContent = 'Обновить';
     deleteBtn.style.display = 'inline-block';
-    
+
     this.show();
     this.showLoading();
-    
+
     try {
       const result = await ApiClient.selectInstance('nomenclature', uuid);
       if (result.status !== 200) throw new Error(result.message);
-      
+
       this.renderFieldsWithData(result.data, 'edit');
-      actionBtn.onclick = () => this.handleUpdate(uuid);
+      actionBtn.onclick = () => {
+        // если есть ошибки валидации, покажем alert
+        if (actionBtn.title) {
+          alert('Исправьте ошибки валидации перед обновлением');
+          return;
+        }
+        this.handleUpdate(uuid);
+      };
       deleteBtn.onclick = () => this.handleDelete(uuid);
-      
     } catch (error) {
       this.showError(`Ошибка загрузки: ${error.message}`);
     }
   }
 
-  renderFields(fields, mode) {
-    const container = document.getElementById('modal-fields');
-    container.innerHTML = '';
-    
-    fields.forEach(field => {
-      const fieldConfig = FIELDS_CONFIG[field.name] || FIELDS_CONFIG._default;
-      if (!fieldConfig.visible[mode]) return;
-      
-      const fieldElement = this.createField(field, fieldConfig, null);
-      container.appendChild(fieldElement);
-    });
-    
-    this.addRequiredFieldsNote(container);
+  async validateCode(value, originalValue) {
+    const val = value.trim();
+    let errorMsg = '';
+
+    if (val.length < 3) return 'Минимум 3 символа';
+
+    if (!/^[a-zA-Z0-9-]*$/.test(val)) return 'Допустимы только латинские буквы, цифры и дефис';
+
+    if (val !== originalValue) {
+      try {
+        const result = await ApiClient.request('/api/instance/list', {
+          type: 'instance_list',
+          table: 'nomenclature'
+        });
+
+        if (result?.data?.length > 0) {
+          const codeExists = result.data.some(item => item.code.toLowerCase() === val.toLowerCase())
+          if (codeExists) {
+            errorMsg = 'Код уже существует';
+          }
+        }
+      } catch (err) {
+        console.error('Ошибка проверки уникальности:', err);
+        errorMsg = 'Ошибка проверки уникальности';
+      }
+    }
+
+    return errorMsg;
+  }
+
+  createFieldWithValidation(field, value, originalValue, mode) {
+    const fieldConfig = FIELDS_CONFIG[field.name] || FIELDS_CONFIG._default;
+    if (!fieldConfig.visible[mode]) return null;
+
+    const fieldElement = this.createField(field, fieldConfig, value);
+
+    const errorDiv = document.createElement('div');
+    errorDiv.className = 'field-error';
+    errorDiv.style.cssText = 'color: #dc3545; font-size: 12px; margin-top: 4px;';
+    fieldElement.appendChild(errorDiv);
+
+    const actionBtn = document.getElementById('modal-action-btn');
+
+    if (field.name === 'code') {
+      let isCodeValid = true;
+
+      const updateActionButtonState = () => {
+        if (isCodeValid) {
+          actionBtn.disabled = false;
+          actionBtn.title = '';
+          actionBtn.style.opacity = '1';
+        } else {
+          actionBtn.disabled = false; // можно кликать, но визуально неактивно
+          actionBtn.title = 'Невозможно обновить: исправьте ошибки валидации';
+          actionBtn.style.opacity = '0.6';
+        }
+      };
+
+      const validateAndUpdate = async (val) => {
+        const errorMsg = await this.validateCode(val, originalValue);
+        errorDiv.textContent = errorMsg;
+        const input = fieldElement.querySelector('input');
+        input.style.borderColor = errorMsg ? '#dc3545' : '#28a745';
+        isCodeValid = !errorMsg;
+        updateActionButtonState();
+      };
+
+      const input = fieldElement.querySelector('input');
+      input.addEventListener('input', async () => validateAndUpdate(input.value));
+      (async () => await validateAndUpdate(value))();
+    }
+
+    return fieldElement;
   }
 
   renderFieldsWithData(data, mode) {
     const container = document.getElementById('modal-fields');
     container.innerHTML = '';
-    
+
     Object.entries(data).forEach(([fieldName, value]) => {
-      const fieldConfig = FIELDS_CONFIG[fieldName] || FIELDS_CONFIG._default;
-      if (!fieldConfig.visible[mode]) return;
-      
-      const field = { name: fieldName };
-      const fieldElement = this.createField(field, fieldConfig, value);
-      container.appendChild(fieldElement);
+      const fieldElement = this.createFieldWithValidation({ name: fieldName }, value, data.code, mode);
+      if (fieldElement) container.appendChild(fieldElement);
     });
-    
+
     this.addRequiredFieldsNote(container);
   }
+
+  renderFields(fields, mode) {
+    const container = document.getElementById('modal-fields');
+    container.innerHTML = '';
+
+    fields.forEach(field => {
+      const fieldElement = this.createFieldWithValidation(field, null, '', mode);
+      if (fieldElement) container.appendChild(fieldElement);
+    });
+
+    this.addRequiredFieldsNote(container);
+  }
+
 
   createField(field, config, value = null) {
     const fieldGroup = document.createElement('div');
     fieldGroup.style.cssText = 'margin-bottom: 15px;';
-    
+
     const label = document.createElement('label');
     const fieldTitle = config.title || field.name;
     label.textContent = fieldTitle + (config.required ? ' *' : '');
@@ -388,7 +463,7 @@ class ModalManager {
       font-weight: bold;
       color: ${config.required ? '#d63384' : '#333'};
     `;
-    
+
     const input = document.createElement('input');
     input.name = field.name;
     input.type = config.type || 'text';
@@ -403,12 +478,12 @@ class ModalManager {
       box-sizing: border-box;
       background: ${config.editable ? 'white' : '#f8f9fa'};
     `;
-    
+
     if (!config.editable) {
       input.disabled = true;
       input.style.color = '#6c757d';
     }
-    
+
     fieldGroup.appendChild(label);
     fieldGroup.appendChild(input);
     return fieldGroup;
@@ -432,7 +507,7 @@ class ModalManager {
   async handleCreate() {
     const data = this.collectFormData();
     if (!data) return;
-    
+
     try {
       const result = await ApiClient.insertInstance('nomenclature', data);
       if (result.status === 200) {
@@ -450,7 +525,7 @@ class ModalManager {
   async handleUpdate(uuid) {
     const data = this.collectFormData();
     if (!data) return;
-    
+
     try {
       const result = await ApiClient.updateInstance('nomenclature', uuid, data);
       if (result.status === 200) {
@@ -467,7 +542,7 @@ class ModalManager {
 
   async handleDelete(uuid) {
     if (!confirm('Вы уверены что хотите удалить эту запись?')) return;
-    
+
     try {
       const result = await ApiClient.deleteInstance('nomenclature', uuid);
       if (result.status === 200) {
@@ -487,11 +562,11 @@ class ModalManager {
     const data = {};
     let hasRequiredFields = true;
     const missingFields = [];
-    
+
     inputs.forEach(input => {
       const fieldConfig = FIELDS_CONFIG[input.name] || FIELDS_CONFIG._default;
       const value = input.value.trim();
-      
+
       if (fieldConfig.required && !value) {
         hasRequiredFields = false;
         missingFields.push(fieldConfig.title || input.name);
@@ -499,22 +574,22 @@ class ModalManager {
       } else {
         input.style.borderColor = fieldConfig.required ? '#fd7e14' : '#ddd';
       }
-      
+
       if (value !== '') {
         data[input.name] = value;
       }
     });
-    
+
     if (!hasRequiredFields) {
       alert(`Заполните обязательные поля: ${missingFields.join(', ')}`);
       return null;
     }
-    
+
     if (Object.keys(data).length === 0) {
       alert('Нет данных для сохранения');
       return null;
     }
-    
+
     return data;
   }
 
@@ -545,30 +620,30 @@ class NomenclatureManager {
   async init(containerId) {
     this.container = document.getElementById(containerId);
     if (!this.container) return;
-    
+
     this.tableManager = new TableManager(this.container, TABLE_CONFIG);
     await this.loadData();
   }
 
   async loadData() {
     if (!this.container) return;
-    
+
     this.container.innerHTML = '<p>Загрузка номенклатуры...</p>';
-    
+
     try {
       const result = await ApiClient.getNomenclature();
-      
+
       if (result.status !== 200) {
         throw new Error(result.message || 'Ошибка запроса');
       }
-      
+
       if (!result.data || !result.data.length) {
         this.container.innerHTML = '<p>Нет данных</p>';
         return;
       }
-      
+
       this.tableManager.render(result.data);
-      
+
     } catch (error) {
       this.container.innerHTML = `<p style='color:red'>Ошибка: ${error.message}</p>`;
     }
@@ -582,7 +657,7 @@ let nomenclatureManager;
 // Функция для динамической загрузки JS файлов из папки items
 async function loadPageScript(pageName) {
   const scriptPath = `items/${pageName}.js`;
-  
+
   return new Promise((resolve, reject) => {
     if (loadedScripts.includes(scriptPath)) {
       resolve();
@@ -614,27 +689,27 @@ function clearApp() {
 async function createHomePage() {
   clearApp();
   const app = document.getElementById('app');
-  
+
   const homeContainer = document.createElement('div');
   homeContainer.className = 'home-page';
-  
+
   const title = document.createElement('h2');
   title.textContent = 'Главная страница';
   title.style.color = '#28a745';
   title.style.marginBottom = '20px';
-  
+
   const description = document.createElement('p');
   description.textContent = 'Добро пожаловать! Кликните на строку в таблице для редактирования';
   description.style.marginBottom = '20px';
-  
+
   const loadingDiv = document.createElement('div');
   loadingDiv.id = 'nomenclature-container';
-  
+
   homeContainer.appendChild(title);
   homeContainer.appendChild(description);
   homeContainer.appendChild(loadingDiv);
   app.appendChild(homeContainer);
-  
+
   // Инициализируем менеджеры
   modalManager = new ModalManager();
   nomenclatureManager = new NomenclatureManager();
@@ -645,23 +720,23 @@ async function createHomePage() {
 async function loadAndCreatePage(pageName, createFunctionName) {
   clearApp();
   const app = document.getElementById('app');
-  
+
   const loadingDiv = document.createElement('div');
   loadingDiv.textContent = `Загрузка ${pageName}...`;
   loadingDiv.style.cssText = 'padding: 20px; text-align: center; color: #666;';
   app.appendChild(loadingDiv);
-  
+
   try {
     await loadPageScript(pageName);
     app.removeChild(loadingDiv);
-    
+
     if (typeof window[createFunctionName] === 'function') {
       const pageElement = await window[createFunctionName]();
       app.appendChild(pageElement);
     } else {
       throw new Error(`Функция ${createFunctionName} не найдена`);
     }
-    
+
   } catch (error) {
     app.innerHTML = `<p style="color: red;">Ошибка загрузки страницы: ${error.message}</p>`;
     console.error('Ошибка загрузки страницы:', error);
@@ -681,7 +756,7 @@ const routes = {
 // Функция рендеринга
 async function render() {
   const hash = location.hash.replace('#', '') || 'home';
-  
+
   if (routes[hash]) {
     await routes[hash]();
   } else {
