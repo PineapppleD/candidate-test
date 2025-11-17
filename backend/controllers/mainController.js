@@ -26,7 +26,6 @@ exports.doGet = utils.catchAsync(async (req, res, next) => {
 
 exports.doEvent = utils.catchAsync(async (req, res, next) => {
     let funcResult = {};
-
     if (req.body && req.body.type === "test") {
         const serverTime = new Date();
         funcResult = {
@@ -49,6 +48,12 @@ exports.doEvent = utils.catchAsync(async (req, res, next) => {
             break;
         case 'nomenclature':
             funcResult = await svList.selectNomenclature(req, res, next);
+            break;
+        case 'individuals':
+            funcResult = await svList.selectIndividuals(req, res, next);
+            break;
+        case 'staffers':
+            funcResult = await svList.selectStaffers(req, res, next);
             break;
         
         // CRUD операции для экземпляров (по UUID)

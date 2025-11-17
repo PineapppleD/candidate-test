@@ -1,39 +1,30 @@
 import TableManager from "./TableManager.js";
 import ApiClient from "../api/ApiCilent.js";
-import { TABLE_CONFIG } from "../config/tableConfig.js";
-import ModalManager from "./ModalManager.js";
+import { INDIVIDUALS_TABLE_CONFIG } from "../config/individualsTableConfig.js";
 
-// Класс для управления номенклатурой
-export default class NomenclatureManager {
+// Класс для управления физическими лицами
+export default class IndividualsManager {
     constructor() {
         this.container = null;
         this.tableManager = null;
-        this.name = 'nomenclature';
-    }
-
-    debounce(func, delay = 300) {
-        let timeout;
-        return (...args) => {
-            clearTimeout(timeout);
-            timeout = setTimeout(() => func.apply(this, args), delay);
-        };
+        this.name = 'individuals';
     }
 
     async init(containerId, modalManager) {
         this.container = document.getElementById(containerId);
         if (!this.container) return;
 
-        this.tableManager = new TableManager(this.container, TABLE_CONFIG, modalManager, 'nomenclature');
+        this.tableManager = new TableManager(this.container, INDIVIDUALS_TABLE_CONFIG, modalManager, 'individuals');
         await this.loadData();
     }
 
     async loadData(showDeleted = false) {
         if (!this.container) return;
 
-        this.container.innerHTML = '<p>Загрузка номенклатуры...</p>';
+        this.container.innerHTML = '<p>Загрузка физических лиц...</p>';
 
         try {
-            const result = await ApiClient.getNomenclature(showDeleted);
+            const result = await ApiClient.getIndividuals();
 
             if (result.status !== 200) throw new Error(result.message || 'Ошибка запроса');
 
@@ -48,5 +39,4 @@ export default class NomenclatureManager {
             this.container.innerHTML = `<p style='color:red'>Ошибка: ${error.message}</p>`;
         }
     }
-
 }

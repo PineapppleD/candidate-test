@@ -13,6 +13,14 @@ export default class ApiClient {
         return await this.request('/api', { type: 'nomenclature' });
     }
 
+    static async getIndividuals() {
+        return await this.request('/api', { type: 'individuals' });
+    }
+
+    static async getStaffers() {
+        return await this.request('/api', { type: 'staffers' });
+    }
+
     static async getMetadata(table) {
         return await this.request('/api/metadata', { table });
     }

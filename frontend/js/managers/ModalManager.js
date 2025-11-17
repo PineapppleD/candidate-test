@@ -4,9 +4,10 @@ import NomenclatureManager from './NomenclatureManager.js';
 
 // Класс для управления модальными окнами
 export default class ModalManager {
-    constructor(nomenclatureManager = null) {
+    constructor(manager = null) {
+        this.currentManager = manager;
+        this.currentData = null;
         this.createModalStructure();
-        this.nomenclatureManager = nomenclatureManager;
     }
 
     createModalStructure() {
@@ -74,7 +75,7 @@ export default class ModalManager {
         this.show();
 
         try {
-            const metadata = await ApiClient.getMetadata('nomenclature');
+            const metadata = await ApiClient.getMetadata(this.currentManager.name);
             if (!metadata.fields) throw new Error('Не удалось получить метаданные');
 
             this.renderFields(metadata.fields, 'create');
@@ -85,58 +86,57 @@ export default class ModalManager {
         }
     }
 
-   async openEditModal(uuid) {
-    const title = document.getElementById('modal-title');
-    const actionBtn = document.getElementById('modal-action-btn');
-    const deleteBtn = document.getElementById('modal-delete-btn');
+    async openEditModal(uuid) {
+        const title = document.getElementById('modal-title');
+        const actionBtn = document.getElementById('modal-action-btn');
+        const deleteBtn = document.getElementById('modal-delete-btn');
 
-    title.textContent = 'Редактирование экземпляра';
-    deleteBtn.style.display = 'inline-block';
+        title.textContent = 'Редактирование экземпляра';
+        deleteBtn.style.display = 'inline-block';
 
-    this.show();
-    this.showLoading();
+        this.show();
+        this.showLoading();
 
-    try {
-        const result = await ApiClient.selectInstance('nomenclature', uuid);
-        if (result.status !== 200) throw new Error(result.message);
+        try {
+            const result = await ApiClient.selectInstance(this.currentManager.name, uuid);
+            if (result.status !== 200) throw new Error(result.message);
 
-        this.currentData = { ...result.data };
-        this.renderFieldsWithData(result.data, 'edit');
+            this.currentData = { ...result.data };
+            this.renderFieldsWithData(result.data, 'edit');
 
-        if (!this.currentData.deleted) {
-            actionBtn.style.display = 'inline-block';
-            actionBtn.textContent = 'Обновить';
-            actionBtn.onclick = () => {
-                if (actionBtn.title) {
-                    alert('Исправьте ошибки валидации перед обновлением');
-                    return;
-                }
-                this.handleUpdate(uuid);
-            };
-        } else {
-            actionBtn.style.display = 'none';
+            if (!this.currentData.deleted) {
+                actionBtn.style.display = 'inline-block';
+                actionBtn.textContent = 'Обновить';
+                actionBtn.onclick = () => {
+                    if (actionBtn.title) {
+                        alert('Исправьте ошибки валидации перед обновлением');
+                        return;
+                    }
+                    this.handleUpdate(uuid);
+                };
+            } else {
+                actionBtn.style.display = 'none';
+            }
+
+            if (result.data.deleted) {
+                deleteBtn.textContent = 'Восстановить';
+                deleteBtn.onclick = () => this.handleRestore(uuid);
+            } else {
+                deleteBtn.textContent = 'Удалить';
+                deleteBtn.onclick = () => this.handleDelete(uuid);
+            }
+
+        } catch (error) {
+            this.showError(`Ошибка загрузки: ${error.message}`);
         }
-
-        if (result.data.deleted) {
-            deleteBtn.textContent = 'Восстановить';
-            deleteBtn.onclick = () => this.handleRestore(uuid);
-        } else {
-            deleteBtn.textContent = 'Удалить';
-            deleteBtn.onclick = () => this.handleDelete(uuid);
-        }
-
-    } catch (error) {
-        this.showError(`Ошибка загрузки: ${error.message}`);
     }
-}
 
 
-    async validateCode(value, originalValue) {
+    async validateCode(value, originalValue, currentId = null) {
         const val = value.trim();
         let errorMsg = '';
 
         if (val.length < 3) return 'Минимум 3 символа';
-
         if (!/^[a-zA-Z0-9-]*$/.test(val)) return 'Допустимы только латинские буквы, цифры и дефис';
 
         if (val !== originalValue) {
@@ -147,10 +147,8 @@ export default class ModalManager {
                 });
 
                 if (result?.data?.length > 0) {
-                    const codeExists = result.data.some(item => item.code?.toLowerCase() === val.toLowerCase())
-                    if (codeExists) {
-                        errorMsg = 'Код уже существует';
-                    }
+                    const exists = result.data.some(item => item.code?.toLowerCase() === val.toLowerCase() && item.id !== currentId);
+                    if (exists) errorMsg = 'Код уже существует';
                 }
             } catch (err) {
                 console.error('Ошибка проверки уникальности:', err);
@@ -161,7 +159,34 @@ export default class ModalManager {
         return errorMsg;
     }
 
-    createFieldWithValidation(field, value, originalValue, mode) {
+    async validateIIN(value, originalValue, currentId = null) {
+        const val = value.trim();
+        let errorMsg = '';
+
+        // Длина и только цифры
+        if (val.length !== 12) return 'ИИН должен содержать ровно 12 цифр';
+        if (!/^\d{12}$/.test(val)) return 'ИИН может содержать только цифры';
+
+        // Проверка уникальности
+        if (val !== originalValue) {
+            try {
+                const result = await ApiClient.getIndividuals();
+                if (result.status === 200 && Array.isArray(result.data)) {
+                    const exists = result.data.some(item => item.iin === val && item.id !== currentId);
+                    if (exists) errorMsg = 'ИИН уже существует';
+                } else {
+                    errorMsg = 'Ошибка проверки уникальности ИИН';
+                }
+            } catch (err) {
+                console.error(err);
+                errorMsg = 'Ошибка проверки уникальности ИИН';
+            }
+        }
+
+        return errorMsg;
+    }
+
+    createFieldWithValidation(field, value, originalValue = '', mode, currentId = null) {
         const fieldConfig = FIELDS_CONFIG[field.name] || FIELDS_CONFIG._default;
         if (!fieldConfig.visible[mode]) return null;
 
@@ -174,33 +199,66 @@ export default class ModalManager {
 
         const actionBtn = document.getElementById('modal-action-btn');
 
-        if (field.name === 'code') {
-            let isCodeValid = true;
+        const setupValidation = async (validateFn, val) => {
+            const errorMsg = await validateFn(val, originalValue, currentId);
+            errorDiv.textContent = errorMsg;
+            const input = fieldElement.querySelector('input');
+            input.style.borderColor = errorMsg ? '#dc3545' : '#28a745';
+            return !errorMsg;
+        };
 
-            const updateActionButtonState = () => {
-                if (isCodeValid) {
+        const input = fieldElement.querySelector('input');
+
+        if (field.name === 'iin') {
+            let isValid = true;
+
+            const updateActionState = () => {
+                if (isValid) {
                     actionBtn.disabled = false;
                     actionBtn.title = '';
                     actionBtn.style.opacity = '1';
                 } else {
-                    actionBtn.disabled = false; // можно кликать, но визуально неактивно
+                    actionBtn.disabled = true;
+                    actionBtn.title = 'Исправьте ошибки валидации';
+                    actionBtn.style.opacity = '0.6';
+                }
+            };
+
+            input.addEventListener('input', async () => {
+                isValid = await setupValidation(this.validateIIN.bind(this), input.value);
+                updateActionState();
+            });
+
+            (async () => {
+                isValid = await setupValidation(this.validateIIN.bind(this), value);
+                updateActionState();
+            })();
+        }
+
+        if (field.name === 'code') {
+            let isValid = true;
+
+            const updateActionState = () => {
+                if (isValid) {
+                    actionBtn.disabled = false;
+                    actionBtn.title = '';
+                    actionBtn.style.opacity = '1';
+                } else {
+                    actionBtn.disabled = true;
                     actionBtn.title = 'Невозможно обновить: исправьте ошибки валидации';
                     actionBtn.style.opacity = '0.6';
                 }
             };
 
-            const validateAndUpdate = async (val) => {
-                const errorMsg = await this.validateCode(val, originalValue);
-                errorDiv.textContent = errorMsg;
-                const input = fieldElement.querySelector('input');
-                input.style.borderColor = errorMsg ? '#dc3545' : '#28a745';
-                isCodeValid = !errorMsg;
-                updateActionButtonState();
-            };
+            input.addEventListener('input', async () => {
+                isValid = await setupValidation(this.validateCode.bind(this), input.value);
+                updateActionState();
+            });
 
-            const input = fieldElement.querySelector('input');
-            input.addEventListener('input', async () => validateAndUpdate(input.value));
-            (async () => await validateAndUpdate(value))();
+            (async () => {
+                isValid = await setupValidation(this.validateCode.bind(this), value);
+                updateActionState();
+            })();
         }
 
         return fieldElement;
@@ -211,7 +269,9 @@ export default class ModalManager {
         container.innerHTML = '';
 
         Object.entries(data).forEach(([fieldName, value]) => {
-            const fieldElement = this.createFieldWithValidation({ name: fieldName }, value, data.code, mode);
+            const originalValue = value;
+            const currentId = data.id || null; // обязательно передаём текущий ID
+            const fieldElement = this.createFieldWithValidation({ name: fieldName }, value, originalValue, mode, currentId);
             if (fieldElement) container.appendChild(fieldElement);
         });
 
@@ -249,11 +309,10 @@ export default class ModalManager {
         input.name = field.name;
         input.type = config.type || 'text';
 
-        // --- Форматируем даты красиво ---
         if ((field.name === 'insertdate' || field.name === 'updatedate') && value) {
             const date = new Date(value);
-            value = date.toLocaleString(); // например: "17.11.2025, 15:10:29"
-            input.disabled = true; // дату нельзя редактировать вручную
+            value = date.toLocaleString();
+            input.disabled = true;
             input.style.color = '#6c757d';
         }
 
@@ -300,117 +359,113 @@ export default class ModalManager {
         if (!data) return;
 
         try {
-            const result = await ApiClient.insertInstance('nomenclature', data);
+            const result = await ApiClient.insertInstance(this.currentManager.name, data);
             if (result.status === 200) {
-                alert('Запись успешно создана');
+                alert('Запись создана');
                 this.close();
-                this.nomenclatureManager.loadData();
+                this.currentManager.loadData();
             } else {
-                alert(`Ошибка создания: ${result.message}`);
+                alert(`Ошибка: ${result.message}`);
             }
-        } catch (error) {
-            alert(`Ошибка: ${error.message}`);
+        } catch (err) {
+            alert(`Ошибка: ${err.message}`);
         }
     }
 
     async handleUpdate(uuid) {
-        const newData = this.collectFormData();
-        if (!newData) return;
+        const data = this.collectFormData();
+        if (!data) return;
 
-        const oldData = this.currentData || {};
+        if (!this.currentData) return;
 
-        const isChanged = Object.keys(newData).some(key => {
-            return key !== 'updatedate' && newData[key] !== oldData[key];
-        });
-
+        const isChanged = Object.keys(data).some(k => data[k] !== this.currentData[k]);
         if (!isChanged) {
             alert('Нет изменений для сохранения');
             return;
         }
 
-        newData.updatedate = new Date().toISOString();
+        data.updatedate = new Date().toISOString();
 
         try {
-            const result = await ApiClient.updateInstance('nomenclature', uuid, newData);
+            const result = await ApiClient.updateInstance(this.currentManager.name, uuid, data);
             if (result.status === 200) {
-                alert('Запись успешно обновлена');
+                alert('Обновлено');
                 this.close();
-                this.nomenclatureManager.loadData();
-            } else {
-                alert(`Ошибка обновления: ${result.message}`);
-            }
-        } catch (error) {
-            alert(`Ошибка: ${error.message}`);
+                this.currentManager.loadData();
+            } else alert(`Ошибка: ${result.message}`);
+        } catch (err) {
+            alert(`Ошибка: ${err.message}`);
         }
     }
 
     async handleDelete(uuid) {
-        if (!confirm('Вы уверены что хотите удалить эту запись?')) return;
-
-        try {
-            const result = await ApiClient.updateInstance('nomenclature', uuid, { deleted: true });
-            if (result.status === 200) {
-                alert('Запись успешно удалена (soft delete)');
-                this.close();
-                this.nomenclatureManager.loadData();
+        if (!confirm('Удалить запись?')) return;
+        if (this.currentManager.name !== 'nomenclature') {
+            try {
+                const result = await ApiClient.deleteInstance(this.currentManager.name, uuid);
+                if (result.status === 200) {
+                    alert('Удалено');
+                    this.close();
+                    this.currentManager.loadData();
+                }
+            } catch (err) {
+                alert(`Ошибка: ${err.message}`);
             }
-        } catch (error) {
-            alert(`Ошибка: ${error.message}`);
+        } else {
+            try {
+                const result = await ApiClient.updateInstance(this.currentManager.name, uuid, { deleted: true });
+                if (result.status === 200) {
+                    alert('Удалено');
+                    this.close();
+                    this.currentManager.loadData();
+                }
+            } catch (err) {
+                alert(`Ошибка: ${err.message}`);
+            }
         }
     }
 
     async handleRestore(uuid) {
-        if (!confirm('Вы уверены, что хотите восстановить эту запись?')) return;
-
+        if (!confirm('Восстановить запись?')) return;
         try {
-            const result = await ApiClient.updateInstance('nomenclature', uuid, { deleted: false });
+            const result = await ApiClient.updateInstance(this.currentManager.name, uuid, { deleted: false });
             if (result.status === 200) {
-                alert('Запись успешно восстановлена');
+                alert('Восстановлено');
                 this.close();
-                this.nomenclatureManager.loadData();
-            } else {
-                alert(`Ошибка восстановления: ${result.message}`);
+                this.currentManager.loadData();
             }
-        } catch (error) {
-            alert(`Ошибка: ${error.message}`);
+        } catch (err) {
+            alert(`Ошибка: ${err.message}`);
         }
     }
-
-
 
     collectFormData() {
         const inputs = document.querySelectorAll('#modal-fields input:not([disabled])');
         const data = {};
-        let hasRequiredFields = true;
-        const missingFields = [];
+        let hasRequired = true;
+        const missing = [];
 
         inputs.forEach(input => {
             const fieldConfig = FIELDS_CONFIG[input.name] || FIELDS_CONFIG._default;
-            const value = input.value.trim();
-
-            if (fieldConfig.required && !value) {
-                hasRequiredFields = false;
-                missingFields.push(fieldConfig.title || input.name);
+            const val = input.value.trim();
+            if (fieldConfig.required && !val) {
+                hasRequired = false;
+                missing.push(fieldConfig.title || input.name);
                 input.style.borderColor = '#dc3545';
             } else {
                 input.style.borderColor = fieldConfig.required ? '#fd7e14' : '#ddd';
             }
-
-            if (value !== '') {
-                data[input.name] = value;
-            }
+            if (val !== '') data[input.name] = val;
         });
 
-        if (!hasRequiredFields) {
-            alert(`Заполните обязательные поля: ${missingFields.join(', ')}`);
+        if (!hasRequired) {
+            alert(`Заполните: ${missing.join(', ')}`);
             return null;
         }
-
-        if (Object.keys(data).length === 0) {
+        if (!Object.keys(data).length) {
             alert('Нет данных для сохранения');
             return null;
         }
-
         return data;
     }
 

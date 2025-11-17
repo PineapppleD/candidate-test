@@ -6,7 +6,7 @@ const Metadata = require('../controllers/Metadata');
 module.exports = class SVList {
     constructor(req, res, next) {
         this.error = {};
-    }  
+    }
 
     // Универсальный метод для получения списка по метаданным
     selectByMeta = async (tableKey, req, res, next) => {
@@ -14,7 +14,6 @@ module.exports = class SVList {
         if (!meta) {
             return { status: 400, message: 'Unknown table' };
         }
-        console.log('meta',meta);
         // Берём все поля
         const fieldsArr = Object.values(meta.fields);
         if (!fieldsArr.length) {
@@ -44,18 +43,18 @@ module.exports = class SVList {
         }
 
         const fieldsSql = fieldsArr.map(v => `"${v.db}" AS "${v.db.replace(/^.*__/, '')}"`);
-        
+
         // Пагинация
         const limit = options.limit || 50;
         const offset = options.offset || 0;
-        
+
         const sql = `SELECT ${fieldsSql.join(', ')} FROM "${meta.realTable}" ORDER BY id DESC LIMIT $1 OFFSET $2`;
-        
+
         try {
             const dbRes = await pg.query(sql, [limit, offset]);
-            return { 
-                status: 200, 
-                message: 'OK', 
+            return {
+                status: 200,
+                message: 'OK',
                 data: dbRes.rows,
                 pagination: {
                     limit,
@@ -71,5 +70,13 @@ module.exports = class SVList {
     // Пример: получение списка номенклатур через метаданные
     selectNomenclature = async (req, res, next, userData) => {
         return this.selectByMeta('nomenclature', req, res, next);
+    }
+
+    selectIndividuals = async (req, res, next) => {
+        return this.selectByMeta('individuals', req, res, next);
+    }
+
+    selectStaffers = async (req, res, next) => {
+        return this.selectByMeta('staffers', req, res, next);
     }
 };

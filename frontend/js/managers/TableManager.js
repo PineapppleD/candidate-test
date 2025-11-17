@@ -1,34 +1,52 @@
 import { debounce } from "../utils/debounce.js";
 import ApiClient from "../api/ApiCilent.js";
+
 export default class TableManager {
-    constructor(container, config, modalManager) {
+    constructor(container, config, modalManager, tableName) {
         this.container = container;
         this.modalManager = modalManager;
         this.config = config;
         this.data = [];
+        this.allData = [];
         this.currentPage = 1;
-        this.limit = 10;           
-        this.sortedColumn = null; 
-        this.sortAsc = true;    
+        this.limit = 10;
+        this.sortedColumn = null;
+        this.sortAsc = true;
+        this.tableName = tableName; // универсальное имя таблицы
+        this.showDeleted = false;
     }
 
-    async render(data = [], showDeleted = false) {
-        this.data = showDeleted ? data.filter(item => item.deleted) : data.filter(item => !item.deleted);
+    async init() {
+        const data = await this.fetchData();
+        this.allData = data;
+        this.render(this.allData, this.showDeleted);
+    }
+
+    async fetchData() {
+        switch (this.tableName) {
+            case 'nomenclature':
+                return (await ApiClient.getNomenclature()).data || [];
+            case 'individuals':
+                return (await ApiClient.getIndividuals()).data || [];
+            case 'staffers':
+                return (await ApiClient.getStaffers()).data || [];
+            default:
+                return [];
+        }
+    }
+
+    render(data = [], showDeleted = false) {
+        this.allData = data; // сохраняем все данные
         this.showDeleted = showDeleted;
         this.currentPage = 1;
 
         this.container.innerHTML = '';
 
-        const toggle = this.createShowDeletedToggle(this.showDeleted);
-        this.container.appendChild(toggle);
+        if (this.tableName === 'nomenclature') this.container.appendChild(this.createShowDeletedToggle(this.showDeleted));
+        this.container.appendChild(this.createButton());
+        this.container.appendChild(this.createSearchInput());
 
-        const createButton = this.createButton();
-        this.container.appendChild(createButton);
-
-        const searchInput = this.createSearchInput();
-        this.container.appendChild(searchInput);
-
-        this.renderPage();
+        this.applyFiltersAndRender();
     }
 
     createShowDeletedToggle(showDeleted) {
@@ -44,11 +62,8 @@ export default class TableManager {
         checkbox.checked = showDeleted;
 
         checkbox.addEventListener('change', async () => {
-            const allData = (await ApiClient.getNomenclature()).data || [];
             this.showDeleted = checkbox.checked;
-            this.data = this.showDeleted ? allData.filter(item => item.deleted) : allData.filter(item => !item.deleted);
-            this.currentPage = 1;
-            this.renderPage();
+            await this.refreshData();
         });
 
         container.appendChild(label);
@@ -59,7 +74,7 @@ export default class TableManager {
     createSearchInput() {
         const input = document.createElement('input');
         input.type = 'text';
-        input.placeholder = 'Поиск по коду или названию...';
+        input.placeholder = 'Поиск...';
         input.style.cssText = `
             width: 100%;
             padding: 10px;
@@ -69,17 +84,9 @@ export default class TableManager {
             box-sizing: border-box;
         `;
 
-        const debouncedFilter = debounce(() => {
-            const query = input.value.toLowerCase();
-            this.data = this.data.filter(item =>
-                (item.code && item.code.toLowerCase().includes(query)) ||
-                (item.represent && item.represent.toLowerCase().includes(query))
-            );
-            this.currentPage = 1;
-            this.renderPage();
-        }, 300);
-
-        input.addEventListener('input', debouncedFilter);
+        input.addEventListener('input', debounce(() => {
+            this.applyFiltersAndRender();
+        }, 300));
 
         return input;
     }
@@ -99,23 +106,114 @@ export default class TableManager {
             font-weight: bold;
         `;
         button.addEventListener('click', () => {
-            this.modalManager.openCreateModal();
+            this.modalManager.openCreateModal(this.tableName, this);
         });
         return button;
     }
 
+    async refreshData() {
+        const freshData = await this.fetchData();
+        this.allData = freshData;
+        this.applyFiltersAndRender();
+    }
+
+    applyFiltersAndRender() {
+        let filtered = this.allData.filter(item => this.showDeleted ? item.deleted : !item.deleted);
+
+        const searchQuery = this.container.querySelector('input[type=text]')?.value?.toLowerCase();
+        if (searchQuery) {
+            filtered = filtered.filter(item =>
+                Object.values(item).some(val =>
+                    val && val.toString().toLowerCase().includes(searchQuery)
+                )
+            );
+        }
+
+        this.data = filtered;
+        this.currentPage = 1;
+        this.renderPage();
+    }
+
     renderPage() {
+        // Удаляем старую таблицу
+        const oldTable = this.container.querySelector('table');
+        if (oldTable) oldTable.remove();
+
+        // Разделяем данные на страницы
         const start = (this.currentPage - 1) * this.limit;
         const end = start + this.limit;
         const pageData = this.data.slice(start, end);
-
-        const oldTable = this.container.querySelector('table');
-        if (oldTable) oldTable.remove();
 
         const table = this.createTable(pageData);
         this.container.appendChild(table);
 
         this.createPaginationControls();
+    }
+
+    createTable(data) {
+        const table = document.createElement('table');
+        table.style.cssText = this.getStyleString(this.config.tableStyle);
+
+        const headerRow = this.createHeaderRow();
+        table.appendChild(headerRow);
+
+        data.forEach(row => {
+            const dataRow = this.createDataRow(row);
+            table.appendChild(dataRow);
+        });
+
+        return table;
+    }
+
+    createHeaderRow() {
+        const row = document.createElement('tr');
+        Object.entries(this.config.headerStyle).forEach(([key, value]) => row.style[key] = value);
+
+        Object.entries(this.config.columns).forEach(([fieldName, config]) => {
+            if (!config.visible) return;
+
+            const th = document.createElement('th');
+            th.textContent = config.title;
+            th.style.cssText = this.getStyleString({ ...this.config.cellStyle, width: config.width || 'auto', textAlign: config.align || 'left' });
+
+            th.style.cursor = 'pointer';
+            th.addEventListener('click', () => {
+                if (this.sortedColumn === fieldName) this.sortAsc = !this.sortAsc;
+                else this.sortAsc = true;
+                this.sortedColumn = fieldName;
+
+                this.data.sort((a, b) => {
+                    if (a[fieldName] == null) return 1;
+                    if (b[fieldName] == null) return -1;
+                    if (a[fieldName] === b[fieldName]) return 0;
+                    return (a[fieldName] > b[fieldName] ? 1 : -1) * (this.sortAsc ? 1 : -1);
+                });
+
+                this.renderPage();
+            });
+
+            row.appendChild(th);
+        });
+
+        return row;
+    }
+
+    createDataRow(row) {
+        const dataRow = document.createElement('tr');
+        dataRow.style.cssText = `cursor: pointer; transition: background-color 0.2s;`;
+        dataRow.addEventListener('mouseenter', () => dataRow.style.backgroundColor = '#f0f8ff');
+        dataRow.addEventListener('mouseleave', () => dataRow.style.backgroundColor = '');
+        dataRow.addEventListener('click', () => this.modalManager.openEditModal(row.uuid));
+
+        Object.entries(this.config.columns).forEach(([fieldName, config]) => {
+            if (!config.visible) return;
+            const td = document.createElement('td');
+            td.textContent = row[fieldName] || '';
+            td.style.cssText = this.getStyleString({ ...this.config.cellStyle, width: config.width || 'auto', textAlign: config.align || 'left' });
+            dataRow.appendChild(td);
+        });
+
+        return dataRow;
     }
 
     createPaginationControls() {
@@ -148,97 +246,6 @@ export default class TableManager {
         }
 
         this.container.appendChild(pagination);
-    }
-
-    createTable(data) {
-        const table = document.createElement('table');
-        table.style.cssText = this.getStyleString(this.config.tableStyle);
-
-        const headerRow = this.createHeaderRow();
-        table.appendChild(headerRow);
-
-        data.forEach(row => {
-            const dataRow = this.createDataRow(row);
-            table.appendChild(dataRow);
-        });
-
-        return table;
-    }
-
-    createHeaderRow() {
-        const row = document.createElement('tr');
-        Object.entries(this.config.headerStyle).forEach(([key, value]) => row.style[key] = value);
-
-        Object.entries(this.config.columns).forEach(([fieldName, config]) => {
-            if (!config.visible) return;
-
-            const th = document.createElement('th');
-            // Заголовок колонки
-            const titleSpan = document.createElement('span');
-            titleSpan.textContent = config.title;
-
-            // Иконка сортировки
-            const sortIcon = document.createElement('img');
-            sortIcon.src = 'https://www.svgrepo.com/show/527495/sort-vertical.svg';
-            sortIcon.alt = 'sort icon';
-            sortIcon.style.width = '20px';
-            sortIcon.style.height = '20px';
-
-            // Добавляем в th
-            th.appendChild(titleSpan);
-            th.appendChild(sortIcon);
-
-            const cellStyles = { ...this.config.cellStyle };
-            if (config.width) cellStyles.width = config.width;
-            if (config.align) cellStyles.textAlign = config.align;
-            th.style.cssText = this.getStyleString(cellStyles);
-            
-
-            // Сортировка по клику на заголовок
-            th.style.cursor = 'pointer';
-            th.addEventListener('click', () => {
-                if (this.sortedColumn === fieldName) this.sortAsc = !this.sortAsc;
-                else this.sortAsc = true;
-                this.sortedColumn = fieldName;
-
-                this.data.sort((a, b) => {
-                    if (a[fieldName] == null) return 1;
-                    if (b[fieldName] == null) return -1;
-                    if (a[fieldName] === b[fieldName]) return 0;
-                    return (a[fieldName] > b[fieldName] ? 1 : -1) * (this.sortAsc ? 1 : -1);
-                });
-
-                this.renderPage();
-            });
-
-            row.appendChild(th);
-        });
-
-        return row;
-    }
-
-    createDataRow(row) {
-        const dataRow = document.createElement('tr');
-        dataRow.style.cssText = `
-            cursor: pointer;
-            transition: background-color 0.2s;
-        `;
-        dataRow.addEventListener('mouseenter', () => dataRow.style.backgroundColor = '#f0f8ff');
-        dataRow.addEventListener('mouseleave', () => dataRow.style.backgroundColor = '');
-        dataRow.addEventListener('click', () => this.modalManager.openEditModal(row.uuid));
-
-        Object.entries(this.config.columns).forEach(([fieldName, config]) => {
-            if (!config.visible) return;
-            const td = document.createElement('td');
-            td.textContent = row[fieldName] || '';
-            const cellStyles = { ...this.config.cellStyle };
-            if (config.width) cellStyles.width = config.width;
-            if (config.align) cellStyles.textAlign = config.align;
-            td.style.cssText = this.getStyleString(cellStyles);
-            dataRow.appendChild(td);
-        });
-
-        return dataRow;
     }
 
     getStyleString(styleObj) {

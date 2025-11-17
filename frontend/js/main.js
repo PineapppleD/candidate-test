@@ -1,6 +1,8 @@
 // main.js - Главный файл и главная страница
 import ModalManager from './managers/ModalManager.js';
 import NomenclatureManager from './managers/NomenclatureManager.js';
+import IndividualsManager from './managers/IndividualsManager.js';
+import StaffersManager from './managers/StaffersManager.js';
 
 // Массив для хранения загруженных скриптов
 let loadedScripts = [];
@@ -8,6 +10,8 @@ let loadedScripts = [];
 // Глобальные экземпляры
 let modalManager;
 let nomenclatureManager;
+let individualsManager;
+let staffersManager;
 
 // Функция для динамической загрузки JS файлов из папки items
 async function loadPageScript(pageName) {
@@ -68,8 +72,72 @@ async function createHomePage() {
   // Инициализируем менеджеры
   modalManager = new ModalManager();
   nomenclatureManager = new NomenclatureManager();
-  modalManager.nomenclatureManager = nomenclatureManager; 
+  modalManager.currentManager = nomenclatureManager; 
   await nomenclatureManager.init('nomenclature-container', modalManager);
+}
+
+// Страница физических лиц
+async function createIndividualsPage() {
+  clearApp();
+  const app = document.getElementById('app');
+
+  const container = document.createElement('div');
+  container.className = 'individuals-page';
+
+  const title = document.createElement('h2');
+  title.textContent = 'Физические лица';
+  title.style.color = '#007bff';
+  title.style.marginBottom = '20px';
+
+  const description = document.createElement('p');
+  description.textContent = 'Управление физическими лицами: добавление, редактирование, поиск по ИИН';
+  description.style.marginBottom = '20px';
+
+  const loadingDiv = document.createElement('div');
+  loadingDiv.id = 'individuals-container';
+
+  container.appendChild(title);
+  container.appendChild(description);
+  container.appendChild(loadingDiv);
+  app.appendChild(container);
+
+  // Инициализируем менеджеры
+  modalManager = new ModalManager();
+  individualsManager = new IndividualsManager();
+  modalManager.currentManager = individualsManager;
+  await individualsManager.init('individuals-container', modalManager);
+}
+
+// Страница сотрудников
+async function createStaffersPage() {
+  clearApp();
+  const app = document.getElementById('app');
+
+  const container = document.createElement('div');
+  container.className = 'staffers-page';
+
+  const title = document.createElement('h2');
+  title.textContent = 'Сотрудники';
+  title.style.color = '#6f42c1';
+  title.style.marginBottom = '20px';
+
+  const description = document.createElement('p');
+  description.textContent = 'Управление сотрудниками: табельные номера, связь с физическими лицами';
+  description.style.marginBottom = '20px';
+
+  const loadingDiv = document.createElement('div');
+  loadingDiv.id = 'staffers-container';
+
+  container.appendChild(title);
+  container.appendChild(description);
+  container.appendChild(loadingDiv);
+  app.appendChild(container);
+
+  // Инициализируем менеджеры
+  modalManager = new ModalManager();
+  staffersManager = new StaffersManager();
+  modalManager.currentManager = staffersManager;
+  await staffersManager.init('staffers-container', modalManager);
 }
 
 // Универсальная функция для загрузки и создания страниц
@@ -104,6 +172,12 @@ const routes = {
   home: async () => {
     await createHomePage();
   },
+  individuals: async () => {
+    await createIndividualsPage();
+  },
+  staffers: async () => {
+    await createStaffersPage();
+  },
   page1: async () => {
     await loadAndCreatePage('page1', 'createPage1');
   }
@@ -127,4 +201,4 @@ async function render() {
 
 // Инициализация
 window.addEventListener('hashchange', render);
-window.addEventListener('DOMContentLoaded', render); 
+window.addEventListener('DOMContentLoaded', render);
