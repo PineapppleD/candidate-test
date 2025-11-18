@@ -145,6 +145,7 @@ export default class TableManager {
         const pageData = this.data.slice(start, end);
 
         const table = this.createTable(pageData);
+        table.className = 'table-business';
         this.container.appendChild(table);
 
         this.createPaginationControls();
@@ -152,7 +153,6 @@ export default class TableManager {
 
     createTable(data) {
         const table = document.createElement('table');
-        table.style.cssText = this.getStyleString(this.config.tableStyle);
 
         const headerRow = this.createHeaderRow();
         table.appendChild(headerRow);
@@ -174,7 +174,7 @@ export default class TableManager {
 
             const th = document.createElement('th');
             th.textContent = config.title;
-            th.style.cssText = this.getStyleString({ ...this.config.cellStyle, width: config.width || 'auto', textAlign: config.align || 'left' });
+            th.className = 'table-header';
 
             th.style.cursor = 'pointer';
             th.addEventListener('click', () => {
@@ -200,7 +200,7 @@ export default class TableManager {
 
     createDataRow(row) {
         const dataRow = document.createElement('tr');
-        dataRow.style.cssText = `cursor: pointer; transition: background-color 0.2s;`;
+        dataRow.className = 'table-row';
         dataRow.addEventListener('mouseenter', () => dataRow.style.backgroundColor = '#f0f8ff');
         dataRow.addEventListener('mouseleave', () => dataRow.style.backgroundColor = '');
         dataRow.addEventListener('click', () => this.modalManager.openEditModal(row.uuid));
@@ -209,7 +209,7 @@ export default class TableManager {
             if (!config.visible) return;
             const td = document.createElement('td');
             td.textContent = row[fieldName] || '';
-            td.style.cssText = this.getStyleString({ ...this.config.cellStyle, width: config.width || 'auto', textAlign: config.align || 'left' });
+            td.className = 'table-cell';
             dataRow.appendChild(td);
         });
 
@@ -230,14 +230,7 @@ export default class TableManager {
         for (let i = 1; i <= totalPages; i++) {
             const btn = document.createElement('button');
             btn.textContent = i;
-            btn.style.cssText = `
-                padding: 5px 10px;
-                cursor: pointer;
-                background: ${i === this.currentPage ? '#28a745' : '#f0f0f0'};
-                color: ${i === this.currentPage ? 'white' : '#333'};
-                border: 1px solid #ddd;
-                border-radius: 4px;
-            `;
+            btn.className = 'btn btn-primary';
             btn.addEventListener('click', () => {
                 this.currentPage = i;
                 this.renderPage();

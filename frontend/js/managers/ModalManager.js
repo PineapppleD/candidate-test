@@ -44,13 +44,19 @@ export default class ModalManager {
     `;
 
         modal.innerHTML = `
-      <h3 id="modal-title" style="margin: 0 0 20px 0; color: #333;">Модальное окно</h3>
-      <div id="modal-fields" style="margin-bottom: 20px;"></div>
-      <div style="display: flex; gap: 10px; justify-content: flex-end;">
-        <button id="modal-action-btn" style="background: #28a745; color: white; padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer;">Действие</button>
-        <button id="modal-delete-btn" style="background: #dc3545; color: white; padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer;">Удалить</button>
-        <button id="modal-cancel-btn" style="background: #6c757d; color: white; padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer;">Отмена</button>
-      </div>
+        <div class="modal" id="modal">
+            <div class="modal-content">
+                <h3 id="modal-title" class="modal-header">Модальное окно</h3>
+                <div id="modal-fields" class="modal-body"></div>
+                <div class="modal-footer">
+                <button id="modal-action-btn" class="btn btn-primary">Действие</button>
+                <button id="modal-delete-btn" class="btn btn-danger">Удалить</button>
+                <button id="modal-cancel-btn" class="btn btn-secondary">Отмена</button>
+                </div>
+                <div id="modal-loading" class="modal-loading">Загрузка...</div>
+            </div>
+        </div>
+
     `;
 
         modalOverlay.appendChild(modal);
